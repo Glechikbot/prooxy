@@ -4,8 +4,8 @@ import requests
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
+# Load .env variables
 load_dotenv()
-
 app = Flask(__name__)
 
 IG_COOKIE = os.getenv("IG_COOKIE", "")
@@ -14,30 +14,35 @@ HEADERS = {
     "Cookie": IG_COOKIE
 }
 
-@app.route("/")
-def index():
-    return "Instagram proxy is alive!", 200
+@app.route("/", methods=["GET"])
+def home():
+    return "OK", 200
 
 @app.route("/download_instagram", methods=["POST"])
 def download_instagram():
-    data = request.get_json(silent=True)
-    insta_url = data.get("url") if data else None
-    if not insta_url:
-        return jsonify({"error": "Missing 'url' in request"}), 400
+    data = request.get_json(silent=True) or {}
+    url = data.get("url")
+    if not url:
+        return jsonify({"error": "Missing url"}), 400
 
-    resp = requests.get(insta_url, headers=HEADERS, timeout=10)
+    resp = requests.get(url, headers=HEADERS, timeout=10)
     html = resp.text
 
-    match = re.search(r'"video_url":"([^"]+)"', html)
-    if match:
-        # Використовуємо правильну екранціію backslash
-        video_url = match.group(1).replace("\\\\u0026", "&").replace("\\\\", "")
-        return jsonify({"url": video_url})
+    # 1) Search for direct video_url JSON
+    m = re.search(r'"video_url":"([^"]+)"', html)
+    if m:
+        link = m.group(1).replace("\u0026", "&").replace("\\", "")
+        return jsonify({"url": link})
 
+    # 2) Fallback: meta og:video
+    m2 = re.search(r'<meta property="og:video" content="([^"]+)"', html)
+    if m2:
+        return jsonify({"url": m2.group(1)})
+
+    # 3) Debug log first 1000 chars of HTML
     print("==== HTML START ====")
     print(html[:1000])
     print("==== HTML END ====")
-
     return jsonify({"error": "Video not found"}), 404
 
 if __name__ == "__main__":
