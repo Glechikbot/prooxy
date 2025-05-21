@@ -4,41 +4,47 @@ import requests
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
+# Завантажити змінні з .env
 load_dotenv()
 
 app = Flask(__name__)
 
-IG_COOKIE = os.getenv("IG_COOKIE")
+# Заголовки з Instagram куками
+IG_COOKIE = os.getenv("IG_COOKIE", "")
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Cookie": IG_COOKIE
 }
 
 @app.route("/")
 def index():
-    return "Instagram proxy is alive!"
+    return "Instagram proxy is alive!", 200
 
 @app.route("/download_instagram", methods=["POST"])
 def download_instagram():
-    try:
-        data = request.get_json()
-        url = data.get("url")
-        if not url:
-            return jsonify({"error": "Missing 'url'"}), 400
+    data = request.get_json(silent=True)
+    insta_url = data.get("url") if data else None
+    if not insta_url:
+        return jsonify({"error": "Missing 'url' in request"}), 400
 
-        response = requests.get(url, headers=HEADERS)
-        html = response.text
+    # Отримуємо HTML сторінки
+    resp = requests.get(insta_url, headers=HEADERS, timeout=10)
+    html = resp.text
 
-        match = re.search(r'"video_url":"([^"]+)"', html)
-        if match:
-            video_url = match.group(1).replace("\\u0026", "&").replace("\\", "")
-            return jsonify({"url": video_url})
+    # Шукаємо пряме відео
+    match = re.search(r'"video_url":"([^"]+)"', html)
+    if match:
+        video_url = match.group(1).replace("\u0026", "&").replace("\", "")
+        return jsonify({"url": video_url})
 
-        print("==== HTML START ====")
-        print(html[:1000])
-        print("==== HTML END ====")
+    # Логування HTML для допомоги у дебагу
+    print("==== HTML START ====")
+    print(html[:1000])
+    print("==== HTML END ====")
 
-        return jsonify({"error": "Video not found"}), 404
+    return jsonify({"error": "Video not found"}), 404
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+if __name__ == "__main__":
+    # Bind to PORT for Render
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
