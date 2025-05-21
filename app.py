@@ -31,7 +31,7 @@ def download_instagram():
 
         match = re.search(r'"video_url":"([^"]+)"', html)
         if match:
-            video_url = match.group(1).replace("\u0026", "&").replace("\", "")
+            video_url = match.group(1).replace("\\u0026", "&").replace("\\", "")
             return jsonify({"url": video_url})
 
         print("==== HTML START ====")
